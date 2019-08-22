@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BeardedManStudios.Forge.Networking;
 using BeardedManStudios.Forge.Networking.Unity;
 using BeardedManStudios.Forge.Networking.Lobby;
@@ -52,6 +52,8 @@ namespace ForgeSteamworksNETExample
 		private List<Button> _uiButtons = new List<Button>();
 		private bool _matchmaking = false;
 
+		private CallResult<LobbyMatchList_t> OnLobbyMatchListCallResult;
+
 		private void Start()
 		{
 #if !STEAMWORKS
@@ -60,6 +62,8 @@ namespace ForgeSteamworksNETExample
 #endif
 
 			SteamAPI.Init();
+
+			OnLobbyMatchListCallResult = CallResult<LobbyMatchList_t>.Create(OnLobbyMatchList);
 
 			GetPlayerSteamInformation();
 
@@ -72,6 +76,29 @@ namespace ForgeSteamworksNETExample
 
 			if (useMainThreadManagerForRPCs)
 				Rpc.MainThreadRunner = MainThreadManager.Instance;
+		}
+
+		void OnLobbyMatchList(LobbyMatchList_t pCallback, bool bIOFailure)
+		{
+			BMSLogger.DebugLog("[" + LobbyMatchList_t.k_iCallback + " - LobbyMatchList] - " + pCallback.m_nLobbiesMatching);
+
+			if (pCallback.m_nLobbiesMatching == 0)
+			{
+				return;
+			}
+
+			int lobbyToJoin = Random.Range(0, (int)pCallback.m_nLobbiesMatching);
+
+			BMSLogger.DebugLog("Joining lobby id: " + lobbyToJoin);
+
+			CSteamID lobby = SteamMatchmaking.GetLobbyByIndex(lobbyToJoin);
+
+			BMSLogger.DebugLog("Joining Lobby SteamID: " + lobby.m_SteamID);
+
+			SteamP2PClient client = new SteamP2PClient();
+			((SteamP2PClient)client).Connect(lobby);
+
+			Connected(client);
 		}
 
 		/// <summary>
@@ -135,6 +162,24 @@ namespace ForgeSteamworksNETExample
 		}
 
 		/// <summary>
+		/// Handle the connecting to a random lobby
+		/// </summary>
+		public void ConnectToRandomLobby()
+		{
+			if (!SteamManager.Initialized)
+			{
+				BMSLogger.DebugLog("Steam manager not initialized");
+				return;
+			}
+
+			BMSLogger.DebugLog("Requesting lobby list");
+
+			SteamAPICall_t handle = SteamMatchmaking.RequestLobbyList();
+			OnLobbyMatchListCallResult.Set(handle);
+
+		}
+
+		/// <summary>
 		/// Handle setting up a host. Called by the host button.
 		/// </summary>
 		public void Host()
@@ -161,13 +206,13 @@ namespace ForgeSteamworksNETExample
 		{
 			if (!networker.IsBound)
 			{
-				Debug.LogError("NetWorker failed to bind");
+				BMSLogger.DebugLog("NetWorker failed to bind");
 				return;
 			}
 
 			if (mgr == null && networkManager == null)
 			{
-				Debug.LogWarning("A network manager was not provided, generating a new one instead");
+				BMSLogger.DebugLog("A network manager was not provided, generating a new one instead");
 				networkManager = new GameObject("Network Manager");
 				mgr = networkManager.AddComponent<NetworkManager>();
 			} else if (mgr == null)
